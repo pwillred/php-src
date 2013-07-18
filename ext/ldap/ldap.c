@@ -490,7 +490,8 @@ static int _php_sasl_interact(LDAP *ld, unsigned flags, void *defaults, void *in
    Bind to LDAP directory using SASL */
 PHP_FUNCTION(ldap_sasl_bind)
 {
-	zval *link;
+	zval *link, **opt_data, *tmp;
+	HashTable *option_hash;
 	ldap_linkdata *ld;
 	char *binddn = NULL;
 	char *passwd = NULL;
@@ -499,10 +500,45 @@ PHP_FUNCTION(ldap_sasl_bind)
 	char *sasl_authz_id = NULL;
 	char *sasl_authc_id = NULL;
 	char *props = NULL;
+	zend_bool no_canon = 0;
 	int rc, dn_len, passwd_len, mech_len, realm_len, authc_id_len, authz_id_len, props_len;
 	php_ldap_bictx *ctx;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "r|sssssss", &link, &binddn, &dn_len, &passwd, &passwd_len, &sasl_mech, &mech_len, &sasl_realm, &realm_len, &sasl_authc_id, &authc_id_len, &sasl_authz_id, &authz_id_len, &props, &props_len) != SUCCESS) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "r|zssssss", &link, &tmp, &passwd, &passwd_len, &sasl_mech, &mech_len, &sasl_realm, &realm_len, &sasl_authc_id, &authc_id_len, &sasl_authz_id, &authz_id_len, &props, &props_len) != SUCCESS) {
+	}
+
+	if(Z_TYPE_P(tmp) == IS_ARRAY) {
+		option_hash = Z_ARRVAL_P(tmp);
+
+		if( zend_hash_find(option_hash, "binddn", sizeof("binddn"), (void**) &opt_data) == SUCCESS ) {
+			binddn = Z_STRVAL_P(*opt_data);
+		}	
+		if( zend_hash_find(option_hash, "passwd", sizeof("passwd"), (void**) &opt_data) == SUCCESS ) {
+			passwd = Z_STRVAL_P(*opt_data);
+		}
+		if( zend_hash_find(option_hash, "sasl_mech", sizeof("sasl_mech"), (void**) &opt_data) == SUCCESS ) {
+			sasl_mech = Z_STRVAL_P(*opt_data);
+		}
+		if( zend_hash_find(option_hash, "sasl_realm", sizeof("sasl_realm"), (void**) &opt_data) == SUCCESS ) {
+			sasl_realm = Z_STRVAL_P(*opt_data);
+		}
+		if( zend_hash_find(option_hash, "sasl_authz_id", sizeof("sasl_authz_id"), (void**) &opt_data) == SUCCESS ) {
+			sasl_authz_id = Z_STRVAL_P(*opt_data);
+		}
+		if( zend_hash_find(option_hash, "sasl_authc_id", sizeof("sasl_authc_id"), (void**) &opt_data) == SUCCESS ) {
+			sasl_authc_id = Z_STRVAL_P(*opt_data);
+		}
+		if( zend_hash_find(option_hash, "props", sizeof("props"), (void**) &opt_data) == SUCCESS ) {
+			props = Z_STRVAL_P(*opt_data);
+		}
+		if( zend_hash_find(option_hash, "no_canon", sizeof("no_canon"), (void**) &opt_data) == SUCCESS ) {
+			no_canon = Z_BVAL_P(*opt_data);
+		}
+	
+	} else if (Z_TYPE_P(tmp) == IS_STRING) {
+		binddn = Z_STRVAL_P(tmp);
+		dn_len = Z_STRLEN_P(tmp);
+	} else {
 		RETURN_FALSE;
 	}
 
@@ -512,6 +548,10 @@ PHP_FUNCTION(ldap_sasl_bind)
 
 	if (props) {
 		ldap_set_option(ld->link, LDAP_OPT_X_SASL_SECPROPS, props);
+	}
+
+	if (no_canon) {
+		ldap_set_option(ld->link, LDAP_OPT_X_SASL_NOCANON, LDAP_OPT_ON);
 	}
 
 	rc = ldap_sasl_interactive_bind_s(ld->link, binddn, ctx->mech, NULL, NULL, LDAP_SASL_QUIET, _php_sasl_interact, ctx);
